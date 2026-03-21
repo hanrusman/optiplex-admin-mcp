@@ -1,0 +1,53 @@
+services:
+  optiplex-admin-mcp:
+    build: .
+    container_name: optiplex-admin-mcp
+    restart: unless-stopped
+
+    # Hardened container settings
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    ports:
+      - "8421:8000"
+
+    # Writable scratch space only — no persistent writes from the app itself
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+
+    volumes:
+      # Docker socket: ro prevents the container from replacing the socket file,
+      # but all Docker API operations (including compose up/restart/build) still work.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # /opt/stacks mounted rw so that git pull (optiplex_deploy) can update the repo.
+      # All file writes are restricted by the Python-level command whitelist —
+      # no raw file write tools are exposed via MCP.
+      - /opt/stacks:/stacks:rw
+
+    environment:
+      - STACKS_DIR=/stacks
+      - TZ=Europe/Amsterdam
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+          pids: 50
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
